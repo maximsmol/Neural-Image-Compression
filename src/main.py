@@ -29,29 +29,33 @@ if args.resume:
   optimiser.load_state_dict(torch.load('optimiser.pth'))
 
 # fixme: epochs aren't epochs
-for i, (data, target) in enumerate(train_loader):
-  if i >= args.epochs:
-    break
+history = []
+for epoch in range(args.epochs):
+  for i, (data, target) in enumerate(train_loader):
 
-  data = data.to(device=device, non_blocking=True)
-  target = data
+    data = data.to(device=device, non_blocking=True)
+    target = data
 
-  optimiser.zero_grad()
+    optimiser.zero_grad()
 
-  code, output = model(data)
+    code, output = model(data)
 
-  loss = F.mse_loss(output, target)
-  loss.backward()
-  train_losses.append(loss.item())
+    loss = F.mse_loss(output, target)
+    loss.backward()
+    train_losses.append(loss.item())
 
-  optimiser.step()
+    optimiser.step()
 
-  show_side_by_side(target[0], output[0].round().detach())
+    if i % args.save_interval == 0:
+      history.append((target[0], output[0].round().detach()))
+      history = history[-10:]
 
-  if i % args.save_interval == 0 or i == args.epochs - 1:
-    print(f'Batch {i}: loss={loss.item()}')
-    torch.save(model.state_dict(), 'checkpoint/model.pth')
-    torch.save(optimiser.state_dict(), 'checkpoint/optimiser.pth')
-    torch.save(train_losses, 'checkpoint/train_losses.pth')
+      print(f'  Batch {i}: loss={loss.item():.2}')
+      torch.save(model.state_dict(), 'checkpoint/model.pth')
+      torch.save(optimiser.state_dict(), 'checkpoint/optimiser.pth')
+  print(f'Epoch {epoch}: avg loss={mean(train_losses):.2}')
+  train_losses = []
+
+  show_side_by_side(history)
 
 print('Done!')
