@@ -11,7 +11,7 @@ def load_dataset():
   train_dataset = ImageFolder(
     root=data_path,
     transform=transforms.Compose([
-        transforms.CenterCrop(128),
+        transforms.RandomResizedCrop(128, scale=(.25, .6)),
         transforms.ToTensor()
       ])
   )
