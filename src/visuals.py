@@ -13,4 +13,7 @@ def show_side_by_side(l):
     axes[i][0].imshow(a)
     axes[i][1].imshow(b)
 
+    axes[i][0].axis('off')
+    axes[i][1].axis('off')
+
   plt.savefig('side-by-side.pdf')
