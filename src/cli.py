@@ -7,7 +7,7 @@ parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='do not use CUDA even if available')
 parser.add_argument('--log-interval', type=int, default=60, metavar='N',
                     help='number of seconds to wait between logging training progress')
-parser.add_argument('--backup-interval', type=int, default=60*60, metavar='N',
+parser.add_argument('--backup-interval', type=int, default=60*30, metavar='N',
                     help='number of seconds to wait between saving another backup when checkpointing')
 parser.add_argument('--save-interval', type=int, default=60*5, metavar='N',
                     help='number of seconds to wait between checkpoints')
