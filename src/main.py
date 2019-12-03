@@ -1,6 +1,7 @@
 import pickle
 import os
 import time
+from statistics import mean
 
 import torch
 import torch.optim as optim
@@ -10,6 +11,11 @@ from model import Net
 from cli import args
 from data import train_loader
 from visuals import show_side_by_side
+
+# show_side_by_side([1, 2, 3])
+
+# import sys
+# sys.exit(0)
 
 use_cuda = torch.cuda.is_available() and not args.no_cuda
 print(f'CUDA found={torch.cuda.is_available()}')
@@ -30,7 +36,7 @@ if torch.cuda.device_count() > 1:
   model = nn.DataParallel(model)
 model = model.to(device)
 
-optimiser = optim.Adam(model.parameters())
+optimiser = optim.Adam(model.parameters(), amsgrad=True)
 
 model.train()
 train_losses = []
@@ -74,15 +80,18 @@ for epoch in range(args.epochs):
     optimiser.step()
 
     batch_end = time.time()
-    chk_data['lastBatch'] += 1
 
-    if i % args.save_interval == 0:
-      history.append((target[0], output[0].round().detach()))
+    if chk_data["lastBatch"] % args.save_interval == 0:
+      normedCode = (code[0] + (-code[0]).max()) / (code[0].max() - code[0].min())
+
+      history.append((target[0], output[0].round().detach(), normedCode.detach()))
       history = history[-10:]
       show_side_by_side(history)
 
       print(f'  Batch {chk_data["lastEpoch"]}/{chk_data["lastBatch"]}: loss={loss.item():.2} ~ {1/(batch_end-batch_start):.2} b/s')
+      print(f'    Code mean={code[0].mean():.5} std={code[0].std():.5}')
 
+      chk_data['lastBatch'] += 1
       pickle.dump(chk_data, open('checkpoint/data1.pickle', 'wb'))
       os.replace('checkpoint/data1.pickle', 'checkpoint/data.pickle')
 
@@ -95,5 +104,8 @@ for epoch in range(args.epochs):
 
   chk_data['lastEpoch'] += 1
   chk_data['lastBatch'] = 0
+
+  pickle.dump(chk_data, open('checkpoint/data1.pickle', 'wb'))
+  os.replace('checkpoint/data1.pickle', 'checkpoint/data.pickle')
 
 print('Done!')

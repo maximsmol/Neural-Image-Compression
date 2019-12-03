@@ -6,7 +6,7 @@ import torchvision.transforms as transforms
 
 # All models were trained using Adam (Kingma & Ba, 2015) applied to batches of 32 images 128×128 pixels in size.
 def load_dataset():
-  data_path = 'data/train/dummy_class'
+  data_path = 'data/train'
 
   train_dataset = ImageFolder(
     root=data_path,

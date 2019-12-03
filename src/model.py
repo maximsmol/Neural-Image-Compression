@@ -1,8 +1,15 @@
+import pickle
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from torchvision.transforms import Normalize
+
+train_stats = pickle.load(open('data/train_stats.pickle', 'rb'))
+
+means_tensor = torch.tensor([train_stats['means']['r'], train_stats['means']['g'], train_stats['means']['b']])
+std_tensor = torch.tensor([train_stats['std']['r'], train_stats['std']['g'], train_stats['std']['b']])
 
 class ByteClampIdGradient(torch.autograd.Function):
     @staticmethod
@@ -63,16 +70,23 @@ class Net(nn.Module):
     # A final convolutional layer is applied and the coefficients downsampled again before quantization through rounding to the nearest integer.
     self.encoder_exit = nn.Conv2d(128, 96, (5, 5), stride=2)
 
+    nn.init.normal_(self.encoder_exit.weight, mean=100., std=10.)
+    self.encoder_exit.weight.data *= (torch.rand(self.encoder_exit.weight.data.shape).round()*2 - 1)
+
     # The decoder mirrors the architecture of the encoder (Figure 9).
     #   Instead of mirror-padding and valid convolutions, we use zero-padded convolutions.
 
     # Upsampling is achieved through convolution followed by a reorganization of the coefficients.
     #   This reorganization turns a tensor with many channels into a tensor of the same dimensionality but with fewer channels and larger spatial extent (for details, see Shi et al., 2016).
     # A convolution and reorganization of coefficients together form a sub-pixel convolution layer.
+    decoder_entry_conv = nn.Conv2d(96, 512, (3, 3), padding=1)
     self.decoder_entry = nn.Sequential(
-        nn.Conv2d(96, 512, (3, 3), padding=1),
+        decoder_entry_conv,
         nn.PixelShuffle(2)
       )
+
+    nn.init.normal_(decoder_entry_conv.weight, mean=1/100., std=1/10.)
+
     self.decoder_residuals = [
       Residual(),
       Residual(),
@@ -93,7 +107,8 @@ class Net(nn.Module):
     # The mirror-padding was chosen such that the output of the encoder has the same spatial extent as an 8 times downsampled image.
     # The normalization centers the distribution of each channel’s values and ensures it has approximately unit variance.
     x = F.pad(x, (14, 14, 14, 14), mode='reflect')
-    x = (x - .5) / .5 # fixme: this is weird normalization
+
+    x = (x.clone() - means_tensor[None, :, None, None]) / std_tensor[None, :, None, None]
 
     x = self.encoder_entry(x)
     for r in self.encoder_residuals:
@@ -108,7 +123,8 @@ class Net(nn.Module):
       x = r(x)
     x = self.decoder_exit(x)
 
-    x = x*.5 + .5
+    x = x.clone() * std_tensor[None, :, None, None] + means_tensor[None, :, None, None]
+
     # Finally, after denormalization, the pixel values are clipped to the range of 0 to 255.
     # Similar to how we deal with gradients of the rounding function,
     #   we redefine the gradient of the clipping function to be 1 outside the clipped range.
