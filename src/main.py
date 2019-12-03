@@ -114,6 +114,7 @@ if args.mode == 'train':
         model.eval()
 
         eval_data, _ = eval_iter.__next__()
+        eval_data = eval_data.to(device=device, non_blocking=True)
         eval_code, eval_output = model(eval_data)
         eval_loss = F.mse_loss(eval_output, eval_data)
         chk_data['evalLosses'][-1].append({
