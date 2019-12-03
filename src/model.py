@@ -35,14 +35,14 @@ class Residual(nn.Module):
   def __init__(self):
     super(Residual, self).__init__()
 
-    self.convs = [
+    self.convs = nn.ModuleList([
       nn.Conv2d(128, 128, (3, 3), padding=1), # fixme: should this always be padded? 0-padded?
       nn.Conv2d(128, 128, (3, 3), padding=1)
-    ]
-    self.bns = [
+    ])
+    self.bns = nn.ModuleList([
       nn.BatchNorm2d(128),
       nn.BatchNorm2d(128)
-    ]
+    ])
 
   def forward(self, x):
     identity = x
@@ -64,16 +64,16 @@ class Net(nn.Module):
       )
     # This is followed by three residual blocks (He et al., 2015),
     #   where each block consists of an additional two convolutional layers with 128 filters each.
-    self.encoder_residuals = [
+    self.encoder_residuals = nn.ModuleList([
       Residual(),
       Residual(),
       Residual()
-    ]
+    ])
     # A final convolutional layer is applied and the coefficients downsampled again before quantization through rounding to the nearest integer.
     self.encoder_exit = nn.Conv2d(128, 96, (5, 5), stride=2)
 
     nn.init.normal_(self.encoder_exit.weight, mean=100., std=10.)
-    self.encoder_exit.weight.data *= (torch.rand(self.encoder_exit.weight.data.shape).round()*2 - 1)
+    self.encoder_exit.weight.data *= (torch.rand(self.encoder_exit.weight.data.shape).round()*2 - 1).to(device)
 
     # The decoder mirrors the architecture of the encoder (Figure 9).
     #   Instead of mirror-padding and valid convolutions, we use zero-padded convolutions.
@@ -89,11 +89,11 @@ class Net(nn.Module):
 
     nn.init.normal_(decoder_entry_conv.weight, mean=1/100., std=1/10.)
 
-    self.decoder_residuals = [
+    self.decoder_residuals = nn.ModuleList([
       Residual(),
       Residual(),
       Residual()
-    ]
+    ])
     # Following three residual blocks,
     #   two sub-pixel convolution layers upsample the image to the resolution of the input.
     self.decoder_exit = nn.Sequential(
