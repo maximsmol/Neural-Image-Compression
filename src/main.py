@@ -51,8 +51,8 @@ if args.resume:
 
   print(f'Starting from {chk_data["lastEpoch"]}/{chk_data["lastBatch"]}')
 
-# fixme: epochs aren't epochs
 history = []
+checkpoint_time = time.time()
 for epoch in range(args.epochs):
   torch.manual_seed(chk_data['lastEpoch'])
 
@@ -77,8 +77,9 @@ for epoch in range(args.epochs):
     optimiser.step()
 
     batch_end = time.time()
+    if batch_end - checkpoint_time >= args.save_interval:
+      checkpoint_time = batch_end
 
-    if chk_data["lastBatch"] % args.save_interval == 0:
       normedCode = (code[0] + (-code[0]).max()) / (code[0].max() - code[0].min())
 
       history.append((target[0].cpu(), output[0].round().detach().cpu(), normedCode.detach().cpu()))
@@ -87,6 +88,8 @@ for epoch in range(args.epochs):
 
       print(f'  Batch {chk_data["lastEpoch"]}/{chk_data["lastBatch"]}: loss={loss.item():.2} ~ {1/(batch_end-batch_start):.2} b/s')
       print(f'    Code mean={code[0].mean():.5} std={code[0].std():.5}')
+
+      os.makedirs('checkpoint', exist_ok=True)
 
       chk_data['lastBatch'] += 1
       pickle.dump(chk_data, open('checkpoint/data1.pickle', 'wb'))
