@@ -26,7 +26,7 @@ train_loader = DataLoader(
   pin_memory=True
 )
 eval_loader = DataLoader(
-  load_dataset('data/train'),
+  load_dataset('data/eval'),
   batch_size=10,
   num_workers=4,
   shuffle=True
