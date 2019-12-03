@@ -34,6 +34,8 @@ model = model.to(device)
 
 checkpoint_root = 'checkpoint'
 latest_checkpoint_dir = join(checkpoint_root, 'latest')
+os.makedirs(latest_checkpoint_dir, exist_ok=True)
+
 if args.resume:
   print('  Loading the model from the latest checkpoint')
 
@@ -150,8 +152,6 @@ if args.mode == 'train':
         print(f'  Writing checkpoint {chk_data["checkpointN"]+1} for batch {chk_data["lastEpoch"]+1}/{chk_data["lastBatch"]}')
 
         checkpoint_time = cur_time
-
-        os.makedirs(latest_checkpoint_dir, exist_ok=True)
 
 
         open(join(latest_checkpoint_dir, 'lock'), 'w')
