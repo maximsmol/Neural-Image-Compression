@@ -73,7 +73,7 @@ class Net(nn.Module):
     self.encoder_exit = nn.Conv2d(128, 96, (5, 5), stride=2)
 
     nn.init.normal_(self.encoder_exit.weight, mean=100., std=10.)
-    self.encoder_exit.weight.data *= (torch.rand(self.encoder_exit.weight.data.shape).round()*2 - 1).to(device)
+    self.encoder_exit.weight.data *= (torch.rand(self.encoder_exit.weight.data.shape).round()*2 - 1)
 
     # The decoder mirrors the architecture of the encoder (Figure 9).
     #   Instead of mirror-padding and valid convolutions, we use zero-padded convolutions.

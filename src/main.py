@@ -81,7 +81,7 @@ for epoch in range(args.epochs):
     if chk_data["lastBatch"] % args.save_interval == 0:
       normedCode = (code[0] + (-code[0]).max()) / (code[0].max() - code[0].min())
 
-      history.append((target[0], output[0].round().detach(), normedCode.detach()))
+      history.append((target[0].cpu(), output[0].round().detach().cpu(), normedCode.detach().cpu()))
       history = history[-10:]
       show_side_by_side(history)
 
