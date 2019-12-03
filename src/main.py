@@ -187,9 +187,6 @@ if args.mode == 'train':
         chk_data["checkpointN"] += 1
         print('    Done')
 
-      if batches_processed >= 2:
-        break
-
     print(f'Epoch {chk_data["lastEpoch"]+1}: avg train loss={mean(chk_data["trainLosses"][-1]):.2} avg eval loss={mean([x["loss"] for x in chk_data["evalLosses"][-1]]):.2}')
 
     chk_data['evalLosses'].append([])
