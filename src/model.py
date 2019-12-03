@@ -33,7 +33,7 @@ class Residual(nn.Module):
     identity = x
     for i in range(len(self.convs)):
       x = self.bns[i](x)
-      x = F.rrelu(x)
+      x = F.relu(x)
       x = self.convs[i](x)
     x = x + identity
     return x
@@ -45,9 +45,9 @@ class Net(nn.Module):
     # Afterwards, the image is convolved and spatially downsampled while at the same time increasing the number of channels to 128.
     self.encoder_entry = nn.Sequential(
         nn.Conv2d(3, 64, (5, 5), stride=2),
-        nn.RReLU(),
+        nn.ReLU(),
         nn.Conv2d(64, 128, (5, 5), stride=2),
-        nn.RReLU()
+        nn.ReLU()
       )
     # This is followed by three residual blocks (He et al., 2015),
     #   where each block consists of an additional two convolutional layers with 128 filters each.
@@ -84,7 +84,7 @@ class Net(nn.Module):
     self.decoder_exit = nn.Sequential(
         nn.Conv2d(128, 256, (3, 3), padding=1),
         nn.PixelShuffle(2),
-        nn.RReLU(),
+        nn.ReLU(),
         nn.Conv2d(64, 12, (3, 3), padding=1),
         nn.PixelShuffle(2)
       )
