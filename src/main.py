@@ -27,7 +27,7 @@ print('Creating a model instance')
 
 model = Net()
 if torch.cuda.device_count() > 1:
-  print('')
+  print('  Setting up data parallelilsm')
   model = nn.DataParallel(model)
 model = model.to(device)
 
