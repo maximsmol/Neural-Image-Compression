@@ -4,4 +4,4 @@ set -e
 
 source venv/bin/activate
 
-python src/main.py $@
+python3 src/main.py $@

@@ -17,10 +17,7 @@ from visuals import show_side_by_side
 # import sys
 # sys.exit(0)
 
-use_cuda = torch.cuda.is_available() and not args.no_cuda
-print(f'CUDA found={torch.cuda.is_available()}')
-print(f'CUDA={use_cuda}, N GPUs={torch.cuda.device_count()}')
-device = torch.device('cuda' if use_cuda else 'cpu')
+from device import device, use_cuda
 
 # determinism is good
 torch.manual_seed(0)

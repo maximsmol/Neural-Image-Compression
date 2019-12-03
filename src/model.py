@@ -6,10 +6,12 @@ import torch.nn.functional as F
 
 from torchvision.transforms import Normalize
 
+from device import device
+
 train_stats = pickle.load(open('data/train_stats.pickle', 'rb'))
 
-means_tensor = torch.tensor([train_stats['means']['r'], train_stats['means']['g'], train_stats['means']['b']])
-std_tensor = torch.tensor([train_stats['std']['r'], train_stats['std']['g'], train_stats['std']['b']])
+means_tensor = torch.tensor([train_stats['means']['r'], train_stats['means']['g'], train_stats['means']['b']]).to(device)
+std_tensor = torch.tensor([train_stats['std']['r'], train_stats['std']['g'], train_stats['std']['b']]).to(device)
 
 class ByteClampIdGradient(torch.autograd.Function):
     @staticmethod
