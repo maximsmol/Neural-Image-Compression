@@ -42,6 +42,8 @@ def show_loss_graphs(dat, eval=False):
   plt.close()
 
   fig, axes = plt.subplots(3, 1)
+  for ax in axes:
+    ax.set_yscale('log')
   if eval:
     axes[0].plot([x['batch'] for x in dat[-1]], [x['loss'] for x in dat[-1]])
     axes[1].plot([x['batchId'] for batch in dat for x in batch], [x['loss'] for batch in dat for x in batch])
