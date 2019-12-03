@@ -45,10 +45,10 @@ def show_loss_graphs(dat, eval=False):
   if eval:
     axes[0].plot([x['batch'] for x in dat[-1]], [x['loss'] for x in dat[-1]])
     axes[1].plot([x['batchId'] for batch in dat for x in batch], [x['loss'] for batch in dat for x in batch])
-    axes[2].plot([mean([x['loss'] for x in batch]) for batch in dat])
+    axes[2].plot([mean([x['loss'] for x in batch]) for batch in dat if batch])
   else:
     axes[0].plot(dat[-1])
     axes[1].plot([x for batch in dat for x in batch])
-    axes[2].plot([mean(batch) for batch in dat])
+    axes[2].plot([mean(batch) for batch in dat if batch])
 
   return fig
