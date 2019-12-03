@@ -81,13 +81,11 @@ if args.mode == 'train':
       print('Reached epoch limit')
       break
 
-    torch.manual_seed(chk_data['lastEpoch'])
-
-    load_iter = iter(train_loader)
-    for j in range(chk_data['lastBatch']):
-      load_iter.__next__()
-
     epoch_start = time.time()
+
+    torch.manual_seed(epoch_start)
+    load_iter = iter(train_loader)
+
     batches_processed = 0
     for i, (data, _) in enumerate(load_iter):
       data = data.to(device=device, non_blocking=True)
@@ -149,7 +147,7 @@ if args.mode == 'train':
       chk_data['lastBatchId'] += 1
 
       if cur_time - checkpoint_time >= args.save_interval:
-        print(f'  Writing checkpoint {chk_data["checkpointN"]+1} for batch {chk_data["lastEpoch"]}/{chk_data["lastBatch"]}')
+        print(f'  Writing checkpoint {chk_data["checkpointN"]+1} for batch {chk_data["lastEpoch"]+1}/{chk_data["lastBatch"]}')
 
         checkpoint_time = cur_time
 
