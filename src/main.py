@@ -89,9 +89,9 @@ for epoch in range(args.epochs):
       print(f'  Batch {chk_data["lastEpoch"]}/{chk_data["lastBatch"]}: loss={loss.item():.2} ~ {1/(batch_end-batch_start):.2} b/s')
       print(f'    Code mean={code[0].mean():.5} std={code[0].std():.5}')
 
+      chk_data['lastBatch'] += 1
       os.makedirs('checkpoint', exist_ok=True)
 
-      chk_data['lastBatch'] += 1
       pickle.dump(chk_data, open('checkpoint/data1.pickle', 'wb'))
       os.replace('checkpoint/data1.pickle', 'checkpoint/data.pickle')
 
@@ -99,6 +99,8 @@ for epoch in range(args.epochs):
       os.replace('checkpoint/model1.pth', 'checkpoint/model.pth')
       torch.save(optimiser.state_dict(), 'checkpoint/optimiser1.pth')
       os.replace('checkpoint/optimiser1.pth', 'checkpoint/optimiser.pth')
+    else:
+      chk_data['lastBatch'] += 1
   print(f'Epoch {chk_data["lastEpoch"]}: avg loss={mean(train_losses):.2}')
   train_losses = []
 
