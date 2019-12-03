@@ -34,7 +34,6 @@ model = model.to(device)
 
 checkpoint_root = 'checkpoint'
 latest_checkpoint_dir = join(checkpoint_root, 'latest')
-os.makedirs(latest_checkpoint_dir, exist_ok=True)
 
 if args.resume:
   print('  Loading the model from the latest checkpoint')
@@ -45,6 +44,7 @@ else:
     print(f'Found a saved checkpoint. Resume with --resume or clear {checkpoint_root}/* to restart')
     print('Quitting')
     sys.exit(0)
+  os.makedirs(latest_checkpoint_dir, exist_ok=True)
 
 if args.mode == 'train':
   print('Setting up training')
