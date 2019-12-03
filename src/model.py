@@ -1,4 +1,5 @@
 import pickle
+import math
 
 import torch
 import torch.nn as nn
@@ -7,29 +8,13 @@ import torch.nn.functional as F
 from torchvision.transforms import Normalize
 
 from device import device
+from autograd.ByteClampIdGradient import ByteClampIdGradient
+from autograd.RoundIdGradient import RoundIdGradient
 
 train_stats = pickle.load(open('data/train_stats.pickle', 'rb'))
 
 means_tensor = torch.tensor([train_stats['means']['r'], train_stats['means']['g'], train_stats['means']['b']]).to(device)
 std_tensor = torch.tensor([train_stats['std']['r'], train_stats['std']['g'], train_stats['std']['b']]).to(device)
-
-class ByteClampIdGradient(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, x):
-        return x.clamp(0, 1)
-
-    @staticmethod
-    def backward(ctx, g):
-        return g
-
-class RoundIdGradient(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, x):
-        return x.round()
-
-    @staticmethod
-    def backward(ctx, g):
-        return g
 
 class Residual(nn.Module):
   def __init__(self):
@@ -72,8 +57,8 @@ class Net(nn.Module):
     # A final convolutional layer is applied and the coefficients downsampled again before quantization through rounding to the nearest integer.
     self.encoder_exit = nn.Conv2d(128, 96, (5, 5), stride=2)
 
-    nn.init.normal_(self.encoder_exit.weight, mean=100., std=10.)
-    self.encoder_exit.weight.data *= (torch.rand(self.encoder_exit.weight.data.shape).round()*2 - 1)
+    self.scaling_params = nn.Parameter(torch.Tensor(1, 96, 1, 1))
+    nn.init.kaiming_uniform_(self.scaling_params, a=math.sqrt(5)) # init like linear
 
     # The decoder mirrors the architecture of the encoder (Figure 9).
     #   Instead of mirror-padding and valid convolutions, we use zero-padded convolutions.
@@ -86,8 +71,6 @@ class Net(nn.Module):
         decoder_entry_conv,
         nn.PixelShuffle(2)
       )
-
-    nn.init.normal_(decoder_entry_conv.weight, mean=1/100., std=1/10.)
 
     self.decoder_residuals = nn.ModuleList([
       Residual(),
@@ -117,9 +100,16 @@ class Net(nn.Module):
       x = r(x)
     x = self.encoder_exit(x)
 
-    x = RoundIdGradient.apply(x)
+    # -1 = 1 byte
+    # 0 = 2 bytes
+    # 1 = 4 bytes
+    scaled_params = (2 ** (8*2 * 2**self.scaling_params - 1))
+
+    x = x.clone() * scaled_params
+    x = RoundIdGradient.apply(x) # todo: maybe clamp the code?
     code = x
 
+    x = x.clone() / scaled_params
     x = self.decoder_entry(x)
     for r in self.decoder_residuals:
       x = r(x)

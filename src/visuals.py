@@ -1,3 +1,5 @@
+from statistics import mean
+
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -23,9 +25,6 @@ def show_side_by_side(l):
       axA.imshow(a)
       axB.imshow(b)
 
-      # axA.text(0.5, 0.5, 'HELLO')
-      # axB.text(0.5, 0.5, 'HELLO')
-
       axA.axis('off')
       axB.axis('off')
 
@@ -35,7 +34,21 @@ def show_side_by_side(l):
 
         ax = fig.add_subplot(codeinner[j])
         ax.imshow(c[:, :, j*3 : j*3 + 3])
-        # ax.text(0.5, 0.5, f'N: {j}')
         ax.axis('off')
 
-  fig.savefig('side-by-side.pdf')
+  return fig
+
+def show_loss_graphs(dat, eval=False):
+  plt.close()
+
+  fig, axes = plt.subplots(3, 1)
+  if eval:
+    axes[0].plot([x['batch'] for x in dat[-1]], [x['loss'] for x in dat[-1]])
+    axes[1].plot([x['batchId'] for batch in dat for x in batch], [x['loss'] for batch in dat for x in batch])
+    axes[2].plot([mean([x['loss'] for x in batch]) for batch in dat])
+  else:
+    axes[0].plot(dat[-1])
+    axes[1].plot([x for batch in dat for x in batch])
+    axes[2].plot([mean(batch) for batch in dat])
+
+  return fig
