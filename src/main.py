@@ -77,7 +77,6 @@ if args.mode == 'train':
   backup_time = cur_time
 
   print('Training')
-  eval_iter = iter(eval_loader)
   while True:
     if chk_data['lastEpoch'] >= args.epochs:
       print('Reached epoch limit')
@@ -87,6 +86,7 @@ if args.mode == 'train':
 
     torch.manual_seed(epoch_start)
     load_iter = iter(train_loader)
+    eval_iter = iter(eval_loader)
 
     batches_processed = 0
     for i, (data, _) in enumerate(load_iter):
