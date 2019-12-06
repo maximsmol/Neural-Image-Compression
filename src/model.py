@@ -239,4 +239,5 @@ class Net(nn.Module):
     #   we redefine the gradient of the clipping function to be 1 outside the clipped range.
     # This ensures that the training signal is non-zero even when the decoded pixels are outside this range (Appendix A.1).
     x = ByteClampIdGradient.apply(x)
-    return debug, code, x
+    # return debug, code, x
+    return code, x
