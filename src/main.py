@@ -100,6 +100,7 @@ if args.mode == 'train':
   backup_time = cur_time
 
   print('Training')
+  eval_iter = iter(eval_loader)
   while True:
     if chk_data['lastEpoch'] >= args.epochs:
       print('Reached epoch limit')
@@ -109,7 +110,6 @@ if args.mode == 'train':
 
     torch.manual_seed(epoch_start)
     load_iter = iter(train_loader)
-    eval_iter = iter(eval_loader)
 
     batches_processed = 0
     cur_time = 0 # batch end time
@@ -123,7 +123,7 @@ if args.mode == 'train':
       # debug, code, output = model(data)
       code, output = model(data)
 
-      loss = F.mse_loss(output, target)
+      loss = F.l1_loss(output, target)
       loss.backward()
 
       optimiser.step()
@@ -142,24 +142,23 @@ if args.mode == 'train':
 
         model.eval()
 
-        eval_data, _ = eval_iter.__next__()
+        try:
+          eval_data, _ = eval_iter.__next__()
+        except StopIteration:
+          eval_iter = iter(eval_loader)
+          eval_data, _ = eval_iter.__next__()
+
         eval_data = eval_data.to(device=device, non_blocking=True)
         # _, eval_code, eval_output = model(eval_data)
         eval_code, eval_output = model(eval_data)
-        eval_loss = F.mse_loss(eval_output, eval_data)
+        eval_loss = F.l1_loss(eval_output, eval_data)
+
         writer.add_scalar('Log-loss/eval', log(eval_loss.item()), global_step=chk_data['lastBatchId'], walltime=cur_time)
         writer.add_scalar('Loss/eval', loss.item(), global_step=chk_data['lastBatchId'], walltime=cur_time)
-        chk_data['evalLosses'].append({
-          'batchId': chk_data["lastBatchId"],
-          'loss': eval_loss.item()
-        })
+        chk_data['evalLosses'].append(eval_loss.item())
 
         model.train()
 
-
-        code_min = code.min()
-        code_max = code.max()
-        code_range = code_max - code_min
 
         normedCode = (code[0] + (-code[0]).max()) / (code[0].max() - code[0].min())
 
@@ -167,7 +166,6 @@ if args.mode == 'train':
         writer.add_figure('Side-by-side', visuals.show_side_by_side(imgs), global_step=chk_data['lastBatchId'], walltime=cur_time)
 
         print(f'  Batch {chk_data["lastEpoch"]+1}/{chk_data["lastBatch"]+1}: train loss={loss.item():.2} eval loss={eval_loss.item():.2} ~ {batches_processed/(cur_time-epoch_start):.2} b/s')
-        print(f'    Code mean={code.mean():.5} std={code.std():.5} min={code_min:.5} min={code_max:.5} range={code_range:.5}')
         # for i in range(len(debug)):
         #   print(f'    Debug={debug[i].cpu()}')
         #   for c in range(debug[i].size(1)):
@@ -224,10 +222,10 @@ if args.mode == 'train':
     trainl = mean(chk_data["trainLosses"])
     writer.add_scalar('Log-loss-epoch-avg/train', log(trainl), global_step=chk_data['lastBatchId'], walltime=cur_time)
     writer.add_scalar('Loss-epoch-avg/train', trainl, global_step=chk_data['lastBatchId'], walltime=cur_time)
-    if not chk_data["evalLosses"][-1]:
+    if not chk_data["evalLosses"]:
       print(f'Epoch {chk_data["lastEpoch"]+1}: avg train loss={trainl:.2} avg eval loss=n/a') # todo: code reuse
     else:
-      evall = mean([x["loss"] for x in chk_data["evalLosses"]])
+      evall = mean(chk_data["evalLosses"])
       writer.add_scalar('Log-loss-epoch-avg/eval', log(evall), global_step=chk_data['lastBatchId'], walltime=cur_time)
       writer.add_scalar('Loss-epoch-avg/eval', evall, global_step=chk_data['lastBatchId'], walltime=cur_time)
       print(f'Epoch {chk_data["lastEpoch"]+1}: avg train loss={trainl:.2} avg eval loss={evall:.2}')
