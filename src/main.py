@@ -101,18 +101,60 @@ if args.mode == 'train':
 
   print('Training')
   eval_iter = iter(eval_loader)
+  cur_time = 0 # batch end time
   while True:
-    if chk_data['lastEpoch'] >= args.epochs:
-      print('Reached epoch limit')
-      break
-
     epoch_start = time.time()
 
     torch.manual_seed(epoch_start)
     load_iter = iter(train_loader)
 
     batches_processed = 0
-    cur_time = 0 # batch end time
+
+    def write_checkpoint():
+      print(f'  Writing checkpoint {chk_data["checkpointN"]+1} for batch {chk_data["lastEpoch"]+1}/{chk_data["lastBatch"]}')
+
+      checkpoint_time = cur_time
+
+
+      open(join(latest_checkpoint_dir, 'lock'), 'w')
+
+
+      pickle.dump(chk_data, open(join(latest_checkpoint_dir, 'data1.pickle'), 'wb')) # todo: code reuse
+      os.replace(join(latest_checkpoint_dir, 'data1.pickle'), join(latest_checkpoint_dir, 'data.pickle'))
+
+
+      torch.save(model.state_dict(), join(latest_checkpoint_dir, 'model1.pth'))
+      os.replace(join(latest_checkpoint_dir, 'model1.pth'), join(latest_checkpoint_dir, 'model.pth'))
+
+      torch.save(optimiser.state_dict(), join(latest_checkpoint_dir, 'optimizer1.pth'))
+      os.replace(join(latest_checkpoint_dir, 'optimizer1.pth'), join(latest_checkpoint_dir, 'optimizer.pth'))
+
+
+      os.remove(join(latest_checkpoint_dir, 'lock'))
+
+      if cur_time - backup_time >= args.backup_interval:
+        print(f'    Saving a backup')
+
+        backup_time = cur_time
+
+        checkpoint_dir = join(checkpoint_root, str(chk_data["checkpointN"]+1))
+        os.makedirs(checkpoint_dir, exist_ok=True)
+
+        open(join(checkpoint_dir, 'lock'), 'w')
+
+        for f in os.listdir(latest_checkpoint_dir):
+          copyfile(join(latest_checkpoint_dir, f), join(checkpoint_dir, f))
+
+        os.remove(join(checkpoint_dir, 'lock'))
+
+      chk_data["checkpointN"] += 1
+      print('    Done')
+
+    if chk_data['lastEpoch'] >= args.epochs:
+      print('Reached epoch limit')
+      write_checkpoint()
+      break
+
     for i, (data, _) in enumerate(load_iter):
       data = data.to(device=device, non_blocking=True)
       target = data
@@ -178,44 +220,7 @@ if args.mode == 'train':
       chk_data['lastBatchId'] += 1
 
       if cur_time - checkpoint_time >= args.save_interval:
-        print(f'  Writing checkpoint {chk_data["checkpointN"]+1} for batch {chk_data["lastEpoch"]+1}/{chk_data["lastBatch"]}')
-
-        checkpoint_time = cur_time
-
-
-        open(join(latest_checkpoint_dir, 'lock'), 'w')
-
-
-        pickle.dump(chk_data, open(join(latest_checkpoint_dir, 'data1.pickle'), 'wb')) # todo: code reuse
-        os.replace(join(latest_checkpoint_dir, 'data1.pickle'), join(latest_checkpoint_dir, 'data.pickle'))
-
-
-        torch.save(model.state_dict(), join(latest_checkpoint_dir, 'model1.pth'))
-        os.replace(join(latest_checkpoint_dir, 'model1.pth'), join(latest_checkpoint_dir, 'model.pth'))
-
-        torch.save(optimiser.state_dict(), join(latest_checkpoint_dir, 'optimizer1.pth'))
-        os.replace(join(latest_checkpoint_dir, 'optimizer1.pth'), join(latest_checkpoint_dir, 'optimizer.pth'))
-
-
-        os.remove(join(latest_checkpoint_dir, 'lock'))
-
-        if cur_time - backup_time >= args.backup_interval:
-          print(f'    Saving a backup')
-
-          backup_time = cur_time
-
-          checkpoint_dir = join(checkpoint_root, str(chk_data["checkpointN"]+1))
-          os.makedirs(checkpoint_dir, exist_ok=True)
-
-          open(join(checkpoint_dir, 'lock'), 'w')
-
-          for f in os.listdir(latest_checkpoint_dir):
-            copyfile(join(latest_checkpoint_dir, f), join(checkpoint_dir, f))
-
-          os.remove(join(checkpoint_dir, 'lock'))
-
-        chk_data["checkpointN"] += 1
-        print('    Done')
+        write_checkpoint()
       if args.debug_single_batch:
         break;
 
@@ -234,9 +239,6 @@ if args.mode == 'train':
     chk_data['trainLosses'] = []
     chk_data['lastEpoch'] += 1
     chk_data['lastBatch'] = 0
-
-    pickle.dump(chk_data, open('checkpoint/latest/data1.pickle', 'wb')) # todo: code reuse
-    os.replace('checkpoint/latest/data1.pickle', 'checkpoint/latest/data.pickle')
 
     writer.flush()
 
