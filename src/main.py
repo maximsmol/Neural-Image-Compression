@@ -4,7 +4,7 @@ import time
 import sys
 from statistics import mean
 from os.path import join
-from shutil import copyfile
+from shutil import copyfile, rmtree
 from math import log
 
 import torch
@@ -31,16 +31,17 @@ model = model.to(device)
 checkpoint_root = 'checkpoint'
 latest_checkpoint_dir = join(checkpoint_root, 'latest')
 
-if args.resume:
-  print('  Loading the model from the latest checkpoint')
+have_checkpoint = os.path.exists(join(latest_checkpoint_dir, 'model.pth'))
+should_resume = not args.restart and have_checkpoint
 
+if should_resume:
+  print('  Loading the model from the latest checkpoint')
   model.load_state_dict(torch.load(join(latest_checkpoint_dir, 'model.pth')))
 else:
-  if os.path.exists(join(latest_checkpoint_dir, 'model.pth')):
-    print(f'Found a saved checkpoint. Resume with --resume or clear {checkpoint_root}/* to restart')
-    print('Quitting')
-    sys.exit(0)
-  os.makedirs(latest_checkpoint_dir, exist_ok=True)
+  rmtree(checkpoint_root)
+  rmtree('log')
+
+os.makedirs(latest_checkpoint_dir, exist_ok=True)
 
 if args.mode == 'train':
   print('Setting up training')
@@ -58,7 +59,7 @@ if args.mode == 'train':
     'trainLosses': [],
     'evalLosses': []
   }
-  if args.resume:
+  if should_resume:
     print('  Loading training state from the latest checkpoint')
 
     optimiser.load_state_dict(torch.load(join(latest_checkpoint_dir, 'optimizer.pth')))
