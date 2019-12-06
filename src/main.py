@@ -68,6 +68,28 @@ if args.mode == 'train':
     print(f'    Continuing from checkpoint {chk_data["checkpointN"]+1}, batch {chk_data["lastEpoch"]+1}/{chk_data["lastBatch"]+1}')
 
   writer = SummaryWriter('log', purge_step=chk_data['lastBatchId'])
+  writer.add_custom_scalars({
+    'Log-loss': {
+      'Batch': [
+        'Multiline',
+        ['Log-loss/train', 'Log-loss/eval']
+      ],
+      'Epoch average': [
+        'Multiline',
+        ['Log-loss-epoch-avg/train', 'Log-loss-epoch-avg/eval']
+      ]
+    },
+    'Loss': {
+      'Batch': [
+        'Multiline',
+        ['Loss/train', 'Loss/eval']
+      ],
+      'Epoch average': [
+        'Multiline',
+        ['Loss-epoch-avg/train', 'Loss-epoch-avg/eval']
+      ]
+    }
+  })
 
   cur_time = time.time()
 
