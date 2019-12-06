@@ -11,6 +11,12 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
+from torchvision.transforms import ToPILImage, ToTensor
+
+import numpy as np
+import PIL
+
+from pytorch_msssim import SSIM
 
 from model import Net
 from cli import args
@@ -19,6 +25,7 @@ import visuals
 
 from device import device
 import determinism
+from cielab_transform import InvCIELABTransform
 
 print('Creating a model instance')
 
@@ -93,6 +100,15 @@ if args.mode == 'train':
     }
   })
 
+  to_tensor = ToTensor()
+  def to_pilimagelab(pic):
+    pic = pic.mul(255).byte()
+    nppic = np.transpose(pic.numpy(), (1, 2, 0))
+    return PIL.Image.fromarray(nppic, mode='LAB')
+  invcielab = InvCIELABTransform()
+
+  ssim = SSIM(win_size=11, win_sigma=1.5, data_range=255, size_average=True, channel=3)
+
   cur_time = time.time()
 
   log_time = cur_time
@@ -156,17 +172,17 @@ if args.mode == 'train':
       write_checkpoint()
       break
 
-    for i, (data, _) in enumerate(load_iter):
-      data = data.to(device=device, non_blocking=True)
-      target = data
+    for i, (data_cie, _) in enumerate(load_iter):
+      data_cie = data_cie.to(device=device, non_blocking=True)
+      target = data_cie
 
 
       optimiser.zero_grad()
 
-      # debug, code, output = model(data)
-      code, output = model(data)
+      # debug, code, output = model(data_cie)
+      code, output = model(data_cie)
 
-      loss = F.l1_loss(output, target)
+      loss = 1-ssim(output, target)
       loss.backward()
 
       optimiser.step()
@@ -186,15 +202,16 @@ if args.mode == 'train':
         model.eval()
 
         try:
-          eval_data, _ = eval_iter.__next__()
+          eval_data_cie, _ = eval_iter.__next__()
         except StopIteration:
           eval_iter = iter(eval_loader)
-          eval_data, _ = eval_iter.__next__()
+          eval_data_cie, _ = eval_iter.__next__()
 
-        eval_data = eval_data.to(device=device, non_blocking=True)
-        # _, eval_code, eval_output = model(eval_data)
-        eval_code, eval_output = model(eval_data)
-        eval_loss = F.l1_loss(eval_output, eval_data)
+        eval_data_cie = eval_data_cie.to(device=device, non_blocking=True)
+
+        # _, eval_code, eval_output = model(eval_data_cie)
+        eval_code, eval_output = model(eval_data_cie)
+        eval_loss = 1-ssim(eval_output, eval_data_cie)
 
         writer.add_scalar('Log-loss/eval', log(eval_loss.item()), global_step=chk_data['lastBatchId'], walltime=cur_time)
         writer.add_scalar('Loss/eval', loss.item(), global_step=chk_data['lastBatchId'], walltime=cur_time)
@@ -205,7 +222,10 @@ if args.mode == 'train':
 
         normedCode = (code[0] + (-code[0]).max()) / (code[0].max() - code[0].min())
 
-        imgs = (target[0].cpu(), output[0].detach().cpu(), normedCode.detach().cpu())
+        data_rgb = to_tensor(invcielab(to_pilimagelab(data_cie[0].cpu())))
+        output_rgb = to_tensor(invcielab(to_pilimagelab(output[0].detach().cpu())))
+
+        imgs = (data_rgb, output_rgb, normedCode.detach().cpu())
         writer.add_figure('Side-by-side', visuals.show_side_by_side(imgs), global_step=chk_data['lastBatchId'], walltime=cur_time)
 
         print(f'  Batch {chk_data["lastEpoch"]+1}/{chk_data["lastBatch"]+1}: train loss={loss.item():.2} eval loss={eval_loss.item():.2} ~ {batches_processed/(cur_time-epoch_start):.2} b/s')
