@@ -16,7 +16,7 @@ def load_dataset(data_path):
         transforms.ColorJitter(brightness=.1, contrast=.05, saturation=.05, hue=.05),
         transforms.RandomHorizontalFlip(),
         transforms.RandomGrayscale(.05),
-        CIELABTransform(),
+        # CIELABTransform(),
         transforms.ToTensor()
       ])
   )
