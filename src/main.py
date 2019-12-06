@@ -123,7 +123,7 @@ if args.mode == 'train':
       # debug, code, output = model(data)
       code, output = model(data)
 
-      loss = F.l1_loss(output, target)
+      loss = F.mse_loss(output, target)
       loss.backward()
 
       optimiser.step()
@@ -146,7 +146,7 @@ if args.mode == 'train':
         eval_data = eval_data.to(device=device, non_blocking=True)
         # _, eval_code, eval_output = model(eval_data)
         eval_code, eval_output = model(eval_data)
-        eval_loss = F.l1_loss(eval_output, eval_data)
+        eval_loss = F.mse_loss(eval_output, eval_data)
         writer.add_scalar('Log-loss/eval', log(eval_loss.item()), global_step=chk_data['lastBatchId'], walltime=cur_time)
         writer.add_scalar('Loss/eval', loss.item(), global_step=chk_data['lastBatchId'], walltime=cur_time)
         chk_data['evalLosses'].append({
