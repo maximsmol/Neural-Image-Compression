@@ -112,7 +112,7 @@ if args.mode == 'train':
       writer.add_scalar('Loss/train', loss.item(), global_step=chk_data['lastBatchId'], walltime=cur_time)
       chk_data['trainLosses'].append(loss.item())
 
-      if True or cur_time - log_time >= args.log_interval:
+      if cur_time - log_time >= args.log_interval:
         log_time = cur_time
 
 
