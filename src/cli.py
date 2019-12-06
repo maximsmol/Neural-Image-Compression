@@ -14,5 +14,5 @@ parser.add_argument('--save-interval', type=int, default=60*5, metavar='N',
 parser.add_argument('--resume', action='store_true', default=False,
                     help='resume training from the last checkpoint')
 parser.add_argument('--mode', default='train',
-                    help='train/eval/infer/render-log')
+                    help='train/eval/infer')
 args = parser.parse_args()

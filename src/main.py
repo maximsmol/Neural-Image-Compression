@@ -17,11 +17,6 @@ from cli import args
 from data import train_loader, eval_loader
 import visuals
 
-
-if args.mode == 'render-log':
-  print('UNSUPPORTED for now')
-  sys.exit(0)
-
 from device import device
 import determinism
 
@@ -33,7 +28,6 @@ if torch.cuda.device_count() > 1:
   model = nn.DataParallel(model)
 model = model.to(device)
 
-
 checkpoint_root = 'checkpoint'
 latest_checkpoint_dir = join(checkpoint_root, 'latest')
 
@@ -42,7 +36,7 @@ if args.resume:
 
   model.load_state_dict(torch.load(join(latest_checkpoint_dir, 'model.pth')))
 else:
-  if os.path.exists(latest_checkpoint_dir):
+  if os.path.exists(join(latest_checkpoint_dir, 'model.pth')):
     print(f'Found a saved checkpoint. Resume with --resume or clear {checkpoint_root}/* to restart')
     print('Quitting')
     sys.exit(0)
@@ -101,6 +95,7 @@ if args.mode == 'train':
 
       optimiser.zero_grad()
 
+      # debug, code, output = model(data)
       code, output = model(data)
 
       loss = F.l1_loss(output, target)
@@ -116,7 +111,7 @@ if args.mode == 'train':
       writer.add_scalar('Loss/train', loss.item(), global_step=chk_data['lastBatchId'], walltime=cur_time)
       chk_data['trainLosses'].append(loss.item())
 
-      if cur_time - log_time >= args.log_interval:
+      if True or cur_time - log_time >= args.log_interval:
         log_time = cur_time
 
 
@@ -124,6 +119,7 @@ if args.mode == 'train':
 
         eval_data, _ = eval_iter.__next__()
         eval_data = eval_data.to(device=device, non_blocking=True)
+        # _, eval_code, eval_output = model(eval_data)
         eval_code, eval_output = model(eval_data)
         eval_loss = F.l1_loss(eval_output, eval_data)
         writer.add_scalar('Log-loss/eval', log(eval_loss.item()), global_step=chk_data['lastBatchId'], walltime=cur_time)
@@ -136,17 +132,20 @@ if args.mode == 'train':
         model.train()
 
 
-        code_min = code[0].min()
-        code_max = code[0].max()
+        code_min = code.min()
+        code_max = code.max()
         code_range = code_max - code_min
 
-        normedCode = (code[0] + (-code[0]).max()) / code_range
+        normedCode = (code[0] + (-code[0]).max()) / (code[0].max() - code[0].min())
 
         imgs = (target[0].cpu(), output[0].round().detach().cpu(), normedCode.detach().cpu())
         writer.add_figure('Side-by-side', visuals.show_side_by_side(imgs), global_step=chk_data['lastBatchId'], walltime=cur_time)
 
         print(f'  Batch {chk_data["lastEpoch"]+1}/{chk_data["lastBatch"]+1}: train loss={loss.item():.2} eval loss={eval_loss.item():.2} ~ {batches_processed/(cur_time-epoch_start):.2} b/s')
-        print(f'    Code mean={code[0].mean():.5} std={code[0].std():.5} min={code[0].min():.5} min={code[0].max():.5} range={code_range:.5}')
+        print(f'    Code mean={code.mean():.5} std={code.std():.5} min={code_min:.5} min={code_max:.5} range={code_range:.5}')
+        # for i in range(len(debug)):
+          # print(f'    Debug={debug[i].cpu()}')
+          # print(f'    Debug {i} mean={debug[i].mean():.5} std={debug[i].std():.5}')
 
         writer.flush()
 
@@ -192,6 +191,8 @@ if args.mode == 'train':
 
         chk_data["checkpointN"] += 1
         print('    Done')
+      break
+    break
 
     trainl = mean(chk_data["trainLosses"])
     writer.add_scalar('Log-loss-epoch-avg/train', log(trainl), global_step=chk_data['lastBatchId'], walltime=cur_time)

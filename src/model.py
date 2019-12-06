@@ -57,8 +57,9 @@ def ICNR(tensor, upscale_factor=2, inizializer=nn.init.kaiming_normal_):
 
     return kernel
 
-def conv_init(c):
-  nn.init.kaiming_normal_(c.weight)
+def conv_init(t):
+  nn.init.kaiming_normal_(t)
+
   # # Convolution Aware Initialization [https://arxiv.org/pdf/1702.06295.pdf]
 
   # print(c.weight.shape)
@@ -108,7 +109,7 @@ class Residual(nn.Module):
     ])
 
     for c in self.convs:
-      conv_init(c)
+      conv_init(c.weight)
 
   def forward(self, x):
     identity = x
@@ -146,14 +147,16 @@ class Net(nn.Module):
     self.encoder_residuals = nn.ModuleList([
       Residual(),
       Residual(),
-      Residual()
+      Residual(),
+      nn.ReLU(),
+      nn.BatchNorm2d(128)
     ])
     # A final convolutional layer is applied and the coefficients downsampled again before quantization through rounding to the nearest integer.
     self.encoder_exit = nn.Conv2d(128, 96, (5, 5), stride=2)
     convs.append(self.encoder_exit)
 
     self.scaling_params = nn.Parameter(torch.Tensor(1, 96, 1, 1))
-    nn.init.kaiming_uniform_(self.scaling_params, a=math.sqrt(5)) # init like linear
+    nn.init.uniform_(self.scaling_params)
 
     # The decoder mirrors the architecture of the encoder (Figure 9).
     #   Instead of mirror-padding and valid convolutions, we use zero-padded convolutions.
@@ -171,7 +174,9 @@ class Net(nn.Module):
     self.decoder_residuals = nn.ModuleList([
       Residual(),
       Residual(),
-      Residual()
+      Residual(),
+      nn.ReLU(),
+      nn.BatchNorm2d(128)
     ])
     # Following three residual blocks,
     #   two sub-pixel convolution layers upsample the image to the resolution of the input.
@@ -189,13 +194,15 @@ class Net(nn.Module):
         nn.PixelShuffle(2)
       )
     for c in decoder_exit_convs:
-      w = ICNR(c.weight, upscale_factor=2)
+      w = ICNR(c.weight, upscale_factor=2, inizializer=conv_init)
       c.weight.data.copy_(w)
 
     for c in convs:
-      conv_init(c)
+      conv_init(c.weight)
 
   def forward(self, x):
+    # debug = []
+
     # The first two layers of the encoder perform preprocessing,
     #   namely mirror padding and a fixed pixelwise normalization.
     # The mirror-padding was chosen such that the output of the encoder has the same spatial extent as an 8 times downsampled image.
@@ -205,6 +212,7 @@ class Net(nn.Module):
     x = (x.clone() - means_tensor[None, :, None, None]) / std_tensor[None, :, None, None]
 
     x = self.encoder_entry(x)
+
     for r in self.encoder_residuals:
       x = r(x)
     x = self.encoder_exit(x)
@@ -216,7 +224,7 @@ class Net(nn.Module):
 
     x = x.clone() * scaled_params
     x = RoundIdGradient.apply(x) # todo: maybe clamp the code?
-    code = x
+    code = x.clone()
 
     x = x.clone() / scaled_params
     x = self.decoder_entry(x)
@@ -231,4 +239,4 @@ class Net(nn.Module):
     #   we redefine the gradient of the clipping function to be 1 outside the clipped range.
     # This ensures that the training signal is non-zero even when the decoded pixels are outside this range (Appendix A.1).
     x = ByteClampIdGradient.apply(x)
-    return code, x
+    return debug, code, x
