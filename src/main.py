@@ -222,7 +222,7 @@ if args.mode == 'train':
 
         normedCode = (code[0] + (-code[0]).max()) / (code[0].max() - code[0].min())
 
-        data_rg = data_cie[0].cpu()
+        data_rgb = data_cie[0].cpu()
         output_rgb = output[0].detach().cpu()
         # data_rgb = to_tensor(invcielab(to_pilimagelab(data_cie[0].cpu())))
         # output_rgb = to_tensor(invcielab(to_pilimagelab(output[0].detach().cpu())))
