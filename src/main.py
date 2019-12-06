@@ -5,10 +5,12 @@ import sys
 from statistics import mean
 from os.path import join
 from shutil import copyfile
+from math import log
 
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
+from torch.utils.tensorboard import SummaryWriter
 
 from model import Net
 from cli import args
@@ -58,9 +60,9 @@ if args.mode == 'train':
     'lastEpoch': 0,
     'lastBatchId': 0,
     'checkpointN': 0,
-    'trainLosses': [[]],
-    'evalLosses': [[]],
-    'imghistory': []
+
+    'trainLosses': [],
+    'evalLosses': []
   }
   if args.resume:
     print('  Loading training state from the latest checkpoint')
@@ -69,6 +71,8 @@ if args.mode == 'train':
     chk_data = pickle.load(open(join(latest_checkpoint_dir, 'data.pickle'), 'rb'))
 
     print(f'    Continuing from checkpoint {chk_data["checkpointN"]+1}, batch {chk_data["lastEpoch"]+1}/{chk_data["lastBatch"]+1}')
+
+  writer = SummaryWriter('log', purge_step=chk_data['lastBatchId'])
 
   cur_time = time.time()
 
@@ -89,6 +93,7 @@ if args.mode == 'train':
     eval_iter = iter(eval_loader)
 
     batches_processed = 0
+    cur_time = 0 # batch end time
     for i, (data, _) in enumerate(load_iter):
       data = data.to(device=device, non_blocking=True)
       target = data
@@ -98,15 +103,19 @@ if args.mode == 'train':
 
       code, output = model(data)
 
-      loss = F.mse_loss(output, target)
+      loss = F.l1_loss(output, target)
       loss.backward()
-      chk_data['trainLosses'][-1].append(loss.item())
 
       optimiser.step()
 
-
       batches_processed += 1
       cur_time = time.time()
+
+
+      writer.add_scalar('Log-loss/train', log(loss.item()), global_step=chk_data['lastBatchId'], walltime=cur_time)
+      writer.add_scalar('Loss/train', loss.item(), global_step=chk_data['lastBatchId'], walltime=cur_time)
+      chk_data['trainLosses'].append(loss.item())
+
       if cur_time - log_time >= args.log_interval:
         log_time = cur_time
 
@@ -116,9 +125,10 @@ if args.mode == 'train':
         eval_data, _ = eval_iter.__next__()
         eval_data = eval_data.to(device=device, non_blocking=True)
         eval_code, eval_output = model(eval_data)
-        eval_loss = F.mse_loss(eval_output, eval_data)
-        chk_data['evalLosses'][-1].append({
-          'batch': chk_data["lastBatch"],
+        eval_loss = F.l1_loss(eval_output, eval_data)
+        writer.add_scalar('Log-loss/eval', log(eval_loss.item()), global_step=chk_data['lastBatchId'], walltime=cur_time)
+        writer.add_scalar('Loss/eval', loss.item(), global_step=chk_data['lastBatchId'], walltime=cur_time)
+        chk_data['evalLosses'].append({
           'batchId': chk_data["lastBatchId"],
           'loss': eval_loss.item()
         })
@@ -132,18 +142,13 @@ if args.mode == 'train':
 
         normedCode = (code[0] + (-code[0]).max()) / code_range
 
-        os.makedirs('log/', exist_ok=True)
-
-        chk_data['imghistory'].append((target[0].cpu(), output[0].round().detach().cpu(), normedCode.detach().cpu()))
-        chk_data['imghistory'] = chk_data['imghistory'][-10:]
-        visuals.show_side_by_side(chk_data['imghistory']).savefig('log/side-by-side.pdf')
-
-        visuals.show_loss_graphs(chk_data['trainLosses']).savefig('log/train-loss.pdf')
-        visuals.show_loss_graphs(chk_data['evalLosses'], eval=True).savefig('log/eval-loss.pdf')
+        imgs = (target[0].cpu(), output[0].round().detach().cpu(), normedCode.detach().cpu())
+        writer.add_figure('Side-by-side', visuals.show_side_by_side(imgs), global_step=chk_data['lastBatchId'], walltime=cur_time)
 
         print(f'  Batch {chk_data["lastEpoch"]+1}/{chk_data["lastBatch"]+1}: train loss={loss.item():.2} eval loss={eval_loss.item():.2} ~ {batches_processed/(cur_time-epoch_start):.2} b/s')
         print(f'    Code mean={code[0].mean():.5} std={code[0].std():.5} min={code[0].min():.5} min={code[0].max():.5} range={code_range:.5}')
 
+        writer.flush()
 
       chk_data['lastBatch'] += 1
       chk_data['lastBatchId'] += 1
@@ -173,6 +178,8 @@ if args.mode == 'train':
         if cur_time - backup_time >= args.backup_interval:
           print(f'    Saving a backup')
 
+          backup_time = cur_time
+
           checkpoint_dir = join(checkpoint_root, str(chk_data["checkpointN"]+1))
           os.makedirs(checkpoint_dir, exist_ok=True)
 
@@ -186,17 +193,27 @@ if args.mode == 'train':
         chk_data["checkpointN"] += 1
         print('    Done')
 
+    trainl = mean(chk_data["trainLosses"])
+    writer.add_scalar('Log-loss-epoch-avg/train', log(trainl), global_step=chk_data['lastBatchId'], walltime=cur_time)
+    writer.add_scalar('Loss-epoch-avg/train', trainl, global_step=chk_data['lastBatchId'], walltime=cur_time)
     if not chk_data["evalLosses"][-1]:
-      print(f'Epoch {chk_data["lastEpoch"]+1}: avg train loss={mean(chk_data["trainLosses"][-1]):.2} avg eval loss=n/a') # todo: code reuse
+      print(f'Epoch {chk_data["lastEpoch"]+1}: avg train loss={trainl:.2} avg eval loss=n/a') # todo: code reuse
     else:
-      print(f'Epoch {chk_data["lastEpoch"]+1}: avg train loss={mean(chk_data["trainLosses"][-1]):.2} avg eval loss={mean([x["loss"] for x in chk_data["evalLosses"][-1]]):.2}')
+      evall = mean([x["loss"] for x in chk_data["evalLosses"]])
+      writer.add_scalar('Log-loss-epoch-avg/eval', log(evall), global_step=chk_data['lastBatchId'], walltime=cur_time)
+      writer.add_scalar('Loss-epoch-avg/eval', evall, global_step=chk_data['lastBatchId'], walltime=cur_time)
+      print(f'Epoch {chk_data["lastEpoch"]+1}: avg train loss={trainl:.2} avg eval loss={evall:.2}')
 
-    chk_data['evalLosses'].append([])
-    chk_data['trainLosses'].append([])
+    chk_data['evalLosses'] = []
+    chk_data['trainLosses'] = []
     chk_data['lastEpoch'] += 1
     chk_data['lastBatch'] = 0
 
     pickle.dump(chk_data, open('checkpoint/latest/data1.pickle', 'wb')) # todo: code reuse
     os.replace('checkpoint/latest/data1.pickle', 'checkpoint/latest/data.pickle')
 
+    writer.flush()
+
+writer.flush()
+writer.close()
 print('Done!')
