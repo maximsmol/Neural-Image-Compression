@@ -112,7 +112,7 @@ if args.mode == 'train':
     def write_checkpoint():
       print(f'  Writing checkpoint {chk_data["checkpointN"]+1} for batch {chk_data["lastEpoch"]+1}/{chk_data["lastBatch"]}')
 
-      nonlocal checkpoint_time
+      global checkpoint_time
       checkpoint_time = cur_time
 
 
@@ -132,7 +132,7 @@ if args.mode == 'train':
 
       os.remove(join(latest_checkpoint_dir, 'lock'))
 
-      nonlocal backup_time
+      global backup_time
       if cur_time - backup_time >= args.backup_interval:
         print(f'    Saving a backup')
 
