@@ -168,7 +168,9 @@ class Net(nn.Module):
     convs.append(decoder_entry_conv)
     self.decoder_entry = nn.Sequential(
         decoder_entry_conv,
-        nn.PixelShuffle(2)
+        nn.PixelShuffle(2),
+        nn.ReLU(),
+        nn.BatchNorm2d(128)
       )
 
     self.decoder_residuals = nn.ModuleList([
@@ -212,7 +214,6 @@ class Net(nn.Module):
     x = (x.clone() - means_tensor[None, :, None, None]) / std_tensor[None, :, None, None]
 
     x = self.encoder_entry(x)
-
     for r in self.encoder_residuals:
       x = r(x)
     x = self.encoder_exit(x)
