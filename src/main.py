@@ -38,8 +38,10 @@ if should_resume:
   print('  Loading the model from the latest checkpoint')
   model.load_state_dict(torch.load(join(latest_checkpoint_dir, 'model.pth')))
 else:
-  rmtree(checkpoint_root)
-  rmtree('log')
+  if have_checkpoint:
+    rmtree(checkpoint_root)
+  if os.path.exists('log'):
+    rmtree('log')
 
 os.makedirs(latest_checkpoint_dir, exist_ok=True)
 
@@ -134,7 +136,7 @@ if args.mode == 'train':
       writer.add_scalar('Loss/train', loss.item(), global_step=chk_data['lastBatchId'], walltime=cur_time)
       chk_data['trainLosses'].append(loss.item())
 
-      if cur_time - log_time >= args.log_interval:
+      if cur_time - log_time >= args.log_interval or args.debug_single_batch:
         log_time = cur_time
 
 
@@ -161,14 +163,16 @@ if args.mode == 'train':
 
         normedCode = (code[0] + (-code[0]).max()) / (code[0].max() - code[0].min())
 
-        imgs = (target[0].cpu(), output[0].round().detach().cpu(), normedCode.detach().cpu())
+        imgs = (target[0].cpu(), output[0].detach().cpu(), normedCode.detach().cpu())
         writer.add_figure('Side-by-side', visuals.show_side_by_side(imgs), global_step=chk_data['lastBatchId'], walltime=cur_time)
 
         print(f'  Batch {chk_data["lastEpoch"]+1}/{chk_data["lastBatch"]+1}: train loss={loss.item():.2} eval loss={eval_loss.item():.2} ~ {batches_processed/(cur_time-epoch_start):.2} b/s')
         print(f'    Code mean={code.mean():.5} std={code.std():.5} min={code_min:.5} min={code_max:.5} range={code_range:.5}')
         # for i in range(len(debug)):
-          # print(f'    Debug={debug[i].cpu()}')
-          # print(f'    Debug {i} mean={debug[i].mean():.5} std={debug[i].std():.5}')
+        #   print(f'    Debug={debug[i].cpu()}')
+        #   for c in range(debug[i].size(1)):
+        #     writer.add_histogram(f'Debug/{i}-{c}', debug[i][0][c], global_step=chk_data['lastBatchId'], walltime=cur_time)
+        #   print(f'    Debug {i} mean={debug[i].mean():.5} std={debug[i].std():.5}')
 
         writer.flush()
 
@@ -214,6 +218,8 @@ if args.mode == 'train':
 
         chk_data["checkpointN"] += 1
         print('    Done')
+      if args.debug_single_batch:
+        break;
 
     trainl = mean(chk_data["trainLosses"])
     writer.add_scalar('Log-loss-epoch-avg/train', log(trainl), global_step=chk_data['lastBatchId'], walltime=cur_time)
@@ -235,6 +241,9 @@ if args.mode == 'train':
     os.replace('checkpoint/latest/data1.pickle', 'checkpoint/latest/data.pickle')
 
     writer.flush()
+
+    if args.debug_single_batch:
+      break;
 
 writer.flush()
 writer.close()

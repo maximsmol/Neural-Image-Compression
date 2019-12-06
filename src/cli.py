@@ -1,6 +1,8 @@
 import argparse
 
 parser = argparse.ArgumentParser(description='Neural Image Compression')
+parser.add_argument('--debug-single-batch', action='store_true', default=False,
+                    help='stop after a single minibatch for devbug purposes')
 parser.add_argument('--epochs', type=int, default=100, metavar='N',
                     help='set the target number of training epochs (default: 10)')
 parser.add_argument('--no-cuda', action='store_true', default=False,
