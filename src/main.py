@@ -192,8 +192,6 @@ if args.mode == 'train':
 
         chk_data["checkpointN"] += 1
         print('    Done')
-      break
-    break
 
     trainl = mean(chk_data["trainLosses"])
     writer.add_scalar('Log-loss-epoch-avg/train', log(trainl), global_step=chk_data['lastBatchId'], walltime=cur_time)
