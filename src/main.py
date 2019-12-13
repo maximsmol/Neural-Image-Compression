@@ -47,10 +47,10 @@ latest_checkpoint_dir = join(checkpoint_root, 'latest')
 have_checkpoint = os.path.exists(join(latest_checkpoint_dir, 'model.pth'))
 should_resume = not args.restart and have_checkpoint
 
-if should_resume:
+if should_resume or args.mode == 'eval':
   print('  Loading the model from the latest checkpoint')
-  model.load_state_dict(torch.load(join(latest_checkpoint_dir, 'model.pth')))
-  probability_model.load_state_dict(torch.load(join(latest_checkpoint_dir, 'probability_model.pth')))
+  model.load_state_dict(torch.load(join(latest_checkpoint_dir, 'model.pth'), map_location=device))
+  probability_model.load_state_dict(torch.load(join(latest_checkpoint_dir, 'probability_model.pth'), map_location=device))
 else:
   if have_checkpoint:
     rmtree(checkpoint_root)
@@ -59,7 +59,29 @@ else:
 
 os.makedirs(latest_checkpoint_dir, exist_ok=True)
 
-if args.mode == 'train':
+if args.mode == 'eval':
+  print('Evaluating')
+
+  model.eval()
+  probability_model.eval()
+
+  t = ToTensor()
+  tinv = ToPILImage()
+
+  inp = PIL.Image.open(args.image).convert("RGB")
+  inp = t(inp)
+  inp = inp.unsqueeze(0)
+  inp = inp.to(device)
+
+  code, out = model(inp)
+  likelihood = probability_model.likelihood(code)/(96*128*128/64)
+
+  print(f'Likelihood: {likelihood}')
+
+  output_img = tinv(out[0])
+  output_img.save(args.image+'-1.png')
+
+elif args.mode == 'train':
   print('Setting up training')
 
   optimiser = optim.Adam(
@@ -83,7 +105,7 @@ if args.mode == 'train':
   if should_resume:
     print('  Loading training state from the latest checkpoint')
 
-    optimiser.load_state_dict(torch.load(join(latest_checkpoint_dir, 'optimizer.pth')))
+    optimiser.load_state_dict(torch.load(join(latest_checkpoint_dir, 'optimizer.pth'), map_location=device))
     chk_data = pickle.load(open(join(latest_checkpoint_dir, 'data.pickle'), 'rb'))
 
     print(f'    Continuing from checkpoint {chk_data["checkpointN"]+1}, batch {chk_data["lastEpoch"]+1}/{chk_data["lastBatch"]+1}')
@@ -164,7 +186,7 @@ if args.mode == 'train':
       torch.save(model.state_dict(), join(latest_checkpoint_dir, 'model1.pth'))
       os.replace(join(latest_checkpoint_dir, 'model1.pth'), join(latest_checkpoint_dir, 'model.pth'))
 
-      torch.save(optimiser.state_dict(), join(latest_checkpoint_dir, 'probability_model1.pth'))
+      torch.save(probability_model.state_dict(), join(latest_checkpoint_dir, 'probability_model1.pth'))
       os.replace(join(latest_checkpoint_dir, 'probability_model1.pth'), join(latest_checkpoint_dir, 'probability_model.pth'))
 
       torch.save(optimiser.state_dict(), join(latest_checkpoint_dir, 'optimizer1.pth'))
@@ -336,6 +358,6 @@ if args.mode == 'train':
     if args.debug_single_batch:
       break;
 
-writer.flush()
-writer.close()
+  writer.flush()
+  writer.close()
 print('Done!')
