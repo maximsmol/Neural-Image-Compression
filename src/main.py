@@ -28,7 +28,7 @@ from device import device
 import determinism
 from cielab_transform import InvCIELABTransform
 
-import arithmeticcoding
+# import arithmeticcoding
 
 print('Creating a model instance')
 
