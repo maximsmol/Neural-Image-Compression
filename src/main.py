@@ -47,7 +47,7 @@ latest_checkpoint_dir = join(checkpoint_root, 'latest')
 have_checkpoint = os.path.exists(join(latest_checkpoint_dir, 'model.pth'))
 should_resume = not args.restart and have_checkpoint
 
-if should_resume or args.mode == 'eval':
+if should_resume:
   print('  Loading the model from the latest checkpoint')
   model.load_state_dict(torch.load(join(latest_checkpoint_dir, 'model.pth'), map_location=device))
   probability_model.load_state_dict(torch.load(join(latest_checkpoint_dir, 'probability_model.pth'), map_location=device))

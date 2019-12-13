@@ -17,5 +17,5 @@ parser.add_argument('--restart', action='store_true', default=False,
                     help='always restart training even if there is a checkpoint')
 parser.add_argument('--mode', default='train',
                     help='train/eval/infer')
-parser.add_argument('image')
+parser.add_argument('image', nargs='?')
 args = parser.parse_args()
