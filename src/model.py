@@ -198,6 +198,11 @@ class Net(nn.Module):
       conv_init(c.weight)
 
   def forward(self, x):
+    code = self.encode(x)
+    x = self.decode(code.clone())
+    return code, x
+
+  def encode(self, x):
     # debug = []
 
     # The first two layers of the encoder perform preprocessing,
@@ -215,8 +220,11 @@ class Net(nn.Module):
 
     x = RoundIdGradient.apply(x)
     x = ByteClampIdGradient.apply(x)
-    code = x.clone()
+    code = x
+    return code
 
+  def decode(self, code):
+    x = code
     x = self.decoder_entry(x)
     for r in self.decoder_residuals:
       x = r(x)
@@ -230,4 +238,4 @@ class Net(nn.Module):
     # This ensures that the training signal is non-zero even when the decoded pixels are outside this range (Appendix A.1).
     x = ByteClampIdGradient.apply(x)
     # return debug, code, x
-    return code, x
+    return x
