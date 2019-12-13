@@ -19,6 +19,7 @@ import PIL
 from pytorch_msssim import SSIM
 
 from model import Net
+from prob_model import ProbabilityModel
 from cli import args
 from data import train_loader, eval_loader
 import visuals
@@ -27,13 +28,18 @@ from device import device
 import determinism
 from cielab_transform import InvCIELABTransform
 
+import arithmeticcoding
+
 print('Creating a model instance')
 
 model = Net()
+probability_model = ProbabilityModel()
 if torch.cuda.device_count() > 1:
   print('  Setting up data parallelilsm')
   model = nn.DataParallel(model)
+  probability_model = nn.DataParallel(probability_model)
 model = model.to(device)
+probability_model = probability_model.to(device)
 
 checkpoint_root = 'checkpoint'
 latest_checkpoint_dir = join(checkpoint_root, 'latest')
@@ -44,6 +50,7 @@ should_resume = not args.restart and have_checkpoint
 if should_resume:
   print('  Loading the model from the latest checkpoint')
   model.load_state_dict(torch.load(join(latest_checkpoint_dir, 'model.pth')))
+  probability_model.load_state_dict(torch.load(join(latest_checkpoint_dir, 'probability_model.pth')))
 else:
   if have_checkpoint:
     rmtree(checkpoint_root)
@@ -55,9 +62,12 @@ os.makedirs(latest_checkpoint_dir, exist_ok=True)
 if args.mode == 'train':
   print('Setting up training')
 
-  optimiser = optim.Adam(model.parameters(), amsgrad=True)
+  optimiser = optim.Adam(
+    list(model.parameters()) + list(probability_model.parameters()),
+    amsgrad=True
+  )
   model.train()
-
+  probability_model.train()
 
   chk_data = {
     'lastBatch': 0,
@@ -66,7 +76,9 @@ if args.mode == 'train':
     'checkpointN': 0,
 
     'trainLosses': [],
-    'evalLosses': []
+    'evalLosses': [],
+    'trainLikelihoods': [],
+    'evalLikelihoods': []
   }
   if should_resume:
     print('  Loading training state from the latest checkpoint')
@@ -96,6 +108,16 @@ if args.mode == 'train':
       'Epoch average': [
         'Multiline',
         ['Loss-epoch-avg/train', 'Loss-epoch-avg/eval']
+      ]
+    },
+    'Likelihood': {
+      'Batch': [
+        'Multiline',
+        ['Likelihood/train', 'Likelihood/eval']
+      ],
+      'Epoch average': [
+        'Multiline',
+        ['Likelihood-epoch-avg/train', 'Likelihood-epoch-avg/eval']
       ]
     }
   })
@@ -142,6 +164,9 @@ if args.mode == 'train':
       torch.save(model.state_dict(), join(latest_checkpoint_dir, 'model1.pth'))
       os.replace(join(latest_checkpoint_dir, 'model1.pth'), join(latest_checkpoint_dir, 'model.pth'))
 
+      torch.save(optimiser.state_dict(), join(latest_checkpoint_dir, 'probability_model1.pth'))
+      os.replace(join(latest_checkpoint_dir, 'probability_model1.pth'), join(latest_checkpoint_dir, 'probability_model.pth'))
+
       torch.save(optimiser.state_dict(), join(latest_checkpoint_dir, 'optimizer1.pth'))
       os.replace(join(latest_checkpoint_dir, 'optimizer1.pth'), join(latest_checkpoint_dir, 'optimizer.pth'))
 
@@ -181,8 +206,10 @@ if args.mode == 'train':
 
       # debug, code, output = model(data_cie)
       code, output = model(data_cie)
+      likelihood = probability_model.likelihood(code)/(96*128*128/64)
 
-      loss = 1-ssim(output, target)
+      distortion_loss = 1-ssim(output, target)
+      loss = likelihood + distortion_loss
       loss.backward()
 
       optimiser.step()
@@ -191,9 +218,13 @@ if args.mode == 'train':
       cur_time = time.time()
 
 
-      writer.add_scalar('Log-loss/train', log(loss.item()), global_step=chk_data['lastBatchId'], walltime=cur_time)
-      writer.add_scalar('Loss/train', loss.item(), global_step=chk_data['lastBatchId'], walltime=cur_time)
-      chk_data['trainLosses'].append(loss.item())
+      writer.add_scalar('Distortion/train', (distortion_loss / 32).item(), global_step=chk_data['lastBatchId'], walltime=cur_time)
+      writer.add_scalar('Likelihood/train', (likelihood / 32).item(), global_step=chk_data['lastBatchId'], walltime=cur_time)
+
+      writer.add_scalar('Log-loss/train', log((loss / 32).item()), global_step=chk_data['lastBatchId'], walltime=cur_time)
+      writer.add_scalar('Loss/train', (loss / 32).item(), global_step=chk_data['lastBatchId'], walltime=cur_time)
+      chk_data['trainLosses'].append((loss / 32).item())
+      chk_data['trainLikelihoods'].append((likelihood / 32).item())
 
       if cur_time - log_time >= args.log_interval or args.debug_single_batch:
         log_time = cur_time
@@ -211,11 +242,37 @@ if args.mode == 'train':
 
         # _, eval_code, eval_output = model(eval_data_cie)
         eval_code, eval_output = model(eval_data_cie)
-        eval_loss = 1-ssim(eval_output, eval_data_cie)
+        eval_likelihood = probability_model.likelihood(eval_code)/(96*128*128/64)
 
-        writer.add_scalar('Log-loss/eval', log(eval_loss.item()), global_step=chk_data['lastBatchId'], walltime=cur_time)
-        writer.add_scalar('Loss/eval', loss.item(), global_step=chk_data['lastBatchId'], walltime=cur_time)
-        chk_data['evalLosses'].append(eval_loss.item())
+        eval_distortion_loss = 1-ssim(eval_output, eval_data_cie)
+        eval_loss = eval_likelihood + eval_distortion_loss
+
+        writer.add_scalar('Likelihood/eval', (eval_likelihood / 10).item(), global_step=chk_data['lastBatchId'], walltime=cur_time)
+        writer.add_scalar('Distortion/eval', (eval_distortion_loss / 10).item(), global_step=chk_data['lastBatchId'], walltime=cur_time)
+
+        writer.add_scalar('Log-loss/eval', log((eval_loss / 10).item()), global_step=chk_data['lastBatchId'], walltime=cur_time)
+        writer.add_scalar('Loss/eval', (loss / 10).item(), global_step=chk_data['lastBatchId'], walltime=cur_time)
+        chk_data['evalLosses'].append((eval_loss / 10).item())
+        chk_data['evalLikelihoods'].append((likelihood / 10).item())
+
+        most_probable = torch.where(
+          probability_model.probs > .5,
+          torch.ones_like(eval_code[0]),
+          torch.zeros_like(eval_code[0])
+        )
+        most_probable_decoded = model.decode(most_probable)
+
+        probability_model_sample = torch.rand_like(eval_code[0])
+        probability_model_sample = torch.where(
+          probability_model_sample > probability_model.probs,
+          torch.ones_like(probability_model_sample),
+          torch.zeros_like(probability_model_sample)
+        )
+        probability_model_sample_decoded = model.decode(probability_model_sample)
+
+        writer.add_histogram('Probability model', probability_model.probs, global_step=chk_data['lastBatchId'], walltime=cur_time)
+        writer.add_image('Probability-model-sample', probability_model_sample_decoded[0], global_step=chk_data['lastBatchId'], walltime=cur_time)
+        writer.add_image('Most probable sample', most_probable_decoded[0], global_step=chk_data['lastBatchId'], walltime=cur_time)
 
         model.train()
 
@@ -230,7 +287,7 @@ if args.mode == 'train':
         imgs = (data_rgb, output_rgb, normedCode.detach().cpu())
         writer.add_figure('Side-by-side', visuals.show_side_by_side(imgs), global_step=chk_data['lastBatchId'], walltime=cur_time)
 
-        print(f'  Batch {chk_data["lastEpoch"]+1}/{chk_data["lastBatch"]+1}: train loss={loss.item():.2} eval loss={eval_loss.item():.2} ~ {batches_processed/(cur_time-epoch_start):.2} b/s')
+        print(f'  Batch {chk_data["lastEpoch"]+1}/{chk_data["lastBatch"]+1}: train loss={(loss / 32).item():.2} eval loss={(eval_loss / 10).item():.2} ~ {batches_processed/(cur_time-epoch_start):.2} b/s')
         # for i in range(len(debug)):
         #   print(f'    Debug={debug[i].cpu()}')
         #   for c in range(debug[i].size(1)):
@@ -247,16 +304,27 @@ if args.mode == 'train':
       if args.debug_single_batch:
         break;
 
+    trainlikelihood = mean(chk_data["trainLikelihoods"])
     trainl = mean(chk_data["trainLosses"])
+
+    writer.add_scalar('Likelihood-epoch-avg/train', trainlikelihood, global_step=chk_data['lastBatchId'], walltime=cur_time)
+
     writer.add_scalar('Log-loss-epoch-avg/train', log(trainl), global_step=chk_data['lastBatchId'], walltime=cur_time)
     writer.add_scalar('Loss-epoch-avg/train', trainl, global_step=chk_data['lastBatchId'], walltime=cur_time)
     if not chk_data["evalLosses"]:
       print(f'Epoch {chk_data["lastEpoch"]+1}: avg train loss={trainl:.2} avg eval loss=n/a') # todo: code reuse
     else:
+      evallikelihood = mean(chk_data["evalLikelihoods"])
       evall = mean(chk_data["evalLosses"])
+
+      writer.add_scalar('Likelihood-epoch-avg/eval', evallikelihood, global_step=chk_data['lastBatchId'], walltime=cur_time)
+
       writer.add_scalar('Log-loss-epoch-avg/eval', log(evall), global_step=chk_data['lastBatchId'], walltime=cur_time)
       writer.add_scalar('Loss-epoch-avg/eval', evall, global_step=chk_data['lastBatchId'], walltime=cur_time)
       print(f'Epoch {chk_data["lastEpoch"]+1}: avg train loss={trainl:.2} avg eval loss={evall:.2}')
+
+    chk_data['trainLikelihoods'] = []
+    chk_data['evalLikelihoods'] = []
 
     chk_data['evalLosses'] = []
     chk_data['trainLosses'] = []
